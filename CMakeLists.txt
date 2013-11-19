@@ -31,3 +31,6 @@ set (DIJKSTRA_SERVER_VERSION_MINOR 0)
 add_executable( ${PROJECT_NAME}
                 src/main.c
               )
+add_executable( ${PROJECT_NAME}-input-gen
+                util/gen_input_data.c
+              )
