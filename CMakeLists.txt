@@ -24,7 +24,7 @@ cmake_policy (SET CMP0015 OLD)
 
 set (CMAKE_BUILD_TYPE "" CACHE STRING "")
 
-project (dijkstra_server)
+project (dijkstra-server)
 set (DIJKSTRA_SERVER_VERSION_MAJOR 1)
 set (DIJKSTRA_SERVER_VERSION_MINOR 0)
 
