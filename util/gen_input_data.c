@@ -27,7 +27,8 @@
 
 int main(void)
 {
-    uint16_t buffer[] = { 1, 2, 14
+    uint16_t buffer[] = { 1, 5, 9 // start, end, # edges that follow
+                        , 1, 2, 14
                         , 1, 3, 9
                         , 1, 4, 7
                         , 2, 5, 9
