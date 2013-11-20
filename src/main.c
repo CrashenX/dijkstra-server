@@ -21,12 +21,18 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdlib.h>
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <unistd.h>
 
+#define LISTEN_PORT 7778
 #define VERT_IDX_MAX 65536 /* Valid indices: 1-65535; invalid index: 0 */
 
 struct edge {
@@ -68,19 +74,31 @@ typedef struct {
  */
 int load_map( char *file
             , vertex_t *v
+            , uint16_t *start
+            , uint16_t *end
             )
 {
     int rc = -1;
     FILE *f = NULL;
-    uint16_t i = 0;
+    uint16_t i = 0, n = 0;
     size_t read = 0;
+    uint16_t num_vert = 0;
     edge_t *e = NULL;
 
     f = fopen(file, "r");
     if(!f) goto cleanup;
-    do {
+    read = fread(start, sizeof(*start), 1, f);
+    if(1 != read) goto cleanup;
+    read = fread(end, sizeof(*end), 1, f);
+    if(1 != read) goto cleanup;
+    read = fread(&num_vert, sizeof(num_vert), 1, f);
+    if(1 != read) goto cleanup;
+#ifdef DEBUG
+    fprintf(stderr, "%d %d %d\n", *start, *end, num_vert);
+#endif
+    for(; n < num_vert; ++n) {
         read = fread(&i, sizeof(i), 1, f);
-        if(0 == read && feof(f)) rc = 0;
+        //if(0 == read && feof(f)) rc = 0;
         if(1 != read) goto cleanup;
         e = malloc(sizeof(*e));
         memset(e, 0, sizeof(*e));
@@ -99,7 +117,8 @@ int load_map( char *file
 #ifdef DEBUG
         fprintf(stderr, "%d->%d:%d\n", i, v[i].tail->dest, v[i].tail->cost);
 #endif
-    } while(1);
+    }
+    rc = 0;
 cleanup:
     if(0 == read && feof(f)) rc = 0;
     if(f) fclose(f);
@@ -366,13 +385,13 @@ int dijkstras( vertex_t *v
  *   - An end index into the array of vertices is provided
  *
  * Guarantess:
- *   - A string containg the path will be returned if a path exists
+ *   - A string containing the path & distance will be returned if a path exists
  *   - NULL will be returned if no path exists
  */
-char *get_path( vertex_t *v
-              , uint16_t start
-              , uint16_t end
-              )
+char * gen_path( vertex_t *v
+               , uint16_t start
+               , uint16_t end
+               )
 {
     assert(VERT_IDX_MAX <= 65536);
     // We will pass through each vertex at most once (65536 - 1)
@@ -406,31 +425,34 @@ char *get_path( vertex_t *v
             path[t] = 0;
         }
     }
-    path[h-2] = 0; // Remove trailing '->'
+    sprintf(path+h-2, " (%d)\n", v[end].dist); // rm trailing '->'; add distance
     return path;
 }
 
-int main(void)
+char * shortest_path(void)
 {
     int i = 0, rc = -1;
     size_t sz = 0;
     vertex_t *v = NULL;
     char *path = NULL;
     uint32_t dist = 0;
+    uint16_t start = 0, end = 0;
 
     sz = sizeof(*v) * VERT_IDX_MAX;
     v = malloc(sz);
     memset(v, 0, sz);
 
-    rc = load_map("../data/map.bin", v);
+    rc = load_map("../data/map.bin", v, &start, &end);
     if(0 != rc) goto cleanup;
 
-    dist = dijkstras(v, 1, 5);
-    path = get_path(v, 1, 5);
+    dist = dijkstras(v, start, end);
+    path = gen_path(v, start, end);
+    if(NULL == path) asprintf( &path
+                             , "No path from '%d' to '%d'\n"
+                             , start
+                             , end
+                             );
 
-    printf("Path: %s (Distance: %d)\n", path, dist);
-
-    rc = 0;
 cleanup:
     for(; i < VERT_IDX_MAX; ++i) {
         edge_t *e = v[i].head;
@@ -441,6 +463,45 @@ cleanup:
         }
     }
     free(v);
-    free(path);
-    return rc;
+    return path;
+}
+
+int main()
+{
+    int fd = socket(PF_INET, SOCK_STREAM, 0);
+    int cli_fd = 0;
+    struct sockaddr_in cli_addr;
+    socklen_t cli_len = sizeof(struct sockaddr_in);
+    struct sockaddr_in sa;
+
+    if(-1 == fd) {
+        fprintf(stderr, "Socket Error: %s\n", strerror(errno));
+        return 1;
+    }
+    memset(&sa, 0, sizeof(struct sockaddr_in));
+    memset(&cli_addr, 0, sizeof(struct sockaddr_in));
+    sa.sin_port = htons(LISTEN_PORT);
+    sa.sin_addr = (struct in_addr) {0};
+    if(-1 == bind(fd, (struct sockaddr*)&sa, sizeof(struct sockaddr_in))) {
+        fprintf(stderr, "Bind Error: %s\n", strerror(errno));
+        return 1;
+    }
+    if(-1 == listen(fd, 5)) {
+        fprintf(stderr, "Listen Error: %s\n", strerror(errno));
+        return 1;
+    }
+    while(-1 != (cli_fd = accept(fd, (struct sockaddr*)&cli_addr, &cli_len)))
+    {
+        char *path = NULL;
+        fprintf(stderr, "Received a connection from %s:%hu\n",
+                inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+        if(NULL == (path = shortest_path())) {
+            fprintf(stderr, "Shortest path error\n");
+            return -1;
+        }
+        fprintf(stderr, "%s\n", path);
+        write(cli_fd, path, strlen(path)+1);
+        free(path);
+        close(cli_fd);
+    }
 }
