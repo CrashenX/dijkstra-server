@@ -25,8 +25,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 
-#define DEBUG
 #define VERT_IDX_MAX 65536 /* Valid indices: 1-65535; invalid index: 0 */
 
 struct edge {
@@ -356,11 +356,67 @@ int dijkstras( vertex_t *v
     return v[end].dist;
 }
 
+/* Get's the path from start to end for the listed vertices, if any
+ *
+ * Requires:
+ *   - An array of vertices is provided with an accessible .dist member
+ *     - 0 dist indicates infinity
+ *   - The array of vertices has been processed via dijkstras()
+ *   - A start index into the array of vertices is provided
+ *   - An end index into the array of vertices is provided
+ *
+ * Guarantess:
+ *   - A string containg the path will be returned if a path exists
+ *   - NULL will be returned if no path exists
+ */
+char *get_path( vertex_t *v
+              , uint16_t start
+              , uint16_t end
+              )
+{
+    assert(VERT_IDX_MAX <= 65536);
+    // We will pass through each vertex at most once (65536 - 1)
+    // We will need at most 7 chars per vertices ('65535->')
+    // Add an extra '\0' terminator for each vertex
+    // This is a wasteful allocation, but we're talking 512K
+    char *path = NULL, *prepend = NULL;
+    size_t sz = VERT_IDX_MAX * sizeof(*path) * 8;
+    uint16_t i = end;
+    int h = 0, t = 0;
+    if(0 == v[end].prev) return NULL;
+    path = malloc(sz);
+    memset(path, 0, sz);
+    prepend = path + sz;
+    do { // write string from back to front
+        prepend -= 8;
+        sprintf(prepend, "%d->", i);
+        if(start == i) break;
+        i = v[i].prev;
+    } while(0 != i);
+    if(start != i) {
+        free(path);
+        return NULL;
+    }
+    while(t < sz && h < sz) { // remove '\0' padding in string
+        while(h < sz && 0 != path[h]) ++h;
+        if(t < h) t = h+1;
+        while(t < sz && 0 == path[t]) ++t;
+        if(t > h && t < sz) {
+            path[h] = path[t];
+            path[t] = 0;
+        }
+    }
+    path[h-2] = 0; // Remove trailing '->'
+    return path;
+}
+
 int main(void)
 {
     int i = 0, rc = -1;
     size_t sz = 0;
     vertex_t *v = NULL;
+    char *path = NULL;
+    uint32_t dist = 0;
 
     sz = sizeof(*v) * VERT_IDX_MAX;
     v = malloc(sz);
@@ -368,7 +424,11 @@ int main(void)
 
     rc = load_map("../data/map.bin", v);
     if(0 != rc) goto cleanup;
-    printf("%d\n", dijkstras(v, 1, 5));
+
+    dist = dijkstras(v, 1, 5);
+    path = get_path(v, 1, 5);
+
+    printf("Path: %s (Distance: %d)\n", path, dist);
 
     rc = 0;
 cleanup:
@@ -381,5 +441,6 @@ cleanup:
         }
     }
     free(v);
+    free(path);
     return rc;
 }
