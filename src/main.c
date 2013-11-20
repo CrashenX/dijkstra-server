@@ -32,7 +32,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#define LISTEN_PORT 7778
+#define LISTEN_PORT 7777
 #define VERT_IDX_MAX 65536 /* Valid indices: 1-65535; invalid index: 0 */
 
 struct edge {
@@ -57,14 +57,16 @@ typedef struct {
 /* Load the graph from a binary file
  *
  * Requires:
- *   - A binary directed graph file path
- *     - Each entry in the file is 6 bytes with no delimiters
+ *   - A fd to read a binary directed graph from
+ *     - The first 2 bytes should be the start vertex id
+ *     - The second 2 bytes should be the stop vertex id
+ *     - The third 2 bytes should be the number of edges that follow
+ *     - Each edge is 6 bytes with no delimiters
  *       2 bytes: unsigned int [1-65535] (source vertex)
  *       2 bytes: unsigned int [1-65535] (sync vertex)
  *       2 bytes: unsigned int [1-65535] (edge cost from source to sync)
  *     - There are no delimiters between entries
- *     - The only data in the file are 6 byte entries
- *     - Read access on the file is granted
+ *     - Read access on the fd is granted
  *   - A reference to a vertex_t array of size VERT_IDX_MAX to store data
  *
  * Guarantees:
@@ -72,34 +74,30 @@ typedef struct {
  *   - 0 will be returned on success
  *   - -1 will be returned on error
  */
-int load_map( char *file
+int load_map( int fd
             , vertex_t *v
             , uint16_t *start
             , uint16_t *end
             )
 {
     int rc = -1;
-    FILE *f = NULL;
     uint16_t i = 0, n = 0;
-    size_t read = 0;
+    ssize_t r = 0;
     uint16_t num_vert = 0;
     edge_t *e = NULL;
 
-    f = fopen(file, "r");
-    if(!f) goto cleanup;
-    read = fread(start, sizeof(*start), 1, f);
-    if(1 != read) goto cleanup;
-    read = fread(end, sizeof(*end), 1, f);
-    if(1 != read) goto cleanup;
-    read = fread(&num_vert, sizeof(num_vert), 1, f);
-    if(1 != read) goto cleanup;
+    r = read(fd, start, sizeof(*start));
+    if(sizeof(*start) != r) goto cleanup;
+    r = read(fd, end, sizeof(*end));
+    if(sizeof(*end) != r) goto cleanup;
+    r = read(fd, &num_vert, sizeof(num_vert));
+    if(sizeof(num_vert) != r) goto cleanup;
 #ifdef DEBUG
     fprintf(stderr, "%d %d %d\n", *start, *end, num_vert);
 #endif
     for(; n < num_vert; ++n) {
-        read = fread(&i, sizeof(i), 1, f);
-        //if(0 == read && feof(f)) rc = 0;
-        if(1 != read) goto cleanup;
+        r = read(fd, &i, sizeof(i));
+        if(sizeof(i) != r) goto cleanup;
         e = malloc(sizeof(*e));
         memset(e, 0, sizeof(*e));
         if(!v[i].head) {
@@ -110,18 +108,16 @@ int load_map( char *file
             v[i].tail->next = e;
             v[i].tail = v[i].tail->next;
         }
-        read = fread(&v[i].tail->dest, sizeof(v[i].tail->dest), 1, f);
-        if(1 != read) goto cleanup;
-        read = fread(&v[i].tail->cost, sizeof(v[i].tail->cost), 1, f);
-        if(1 != read) goto cleanup;
+        r = read(fd, &v[i].tail->dest, sizeof(v[i].tail->dest));
+        if(sizeof(v[i].tail->dest) != r) goto cleanup;
+        r = read(fd, &v[i].tail->cost, sizeof(v[i].tail->cost));
+        if(sizeof(v[i].tail->cost) != r) goto cleanup;
 #ifdef DEBUG
         fprintf(stderr, "%d->%d:%d\n", i, v[i].tail->dest, v[i].tail->cost);
 #endif
     }
     rc = 0;
 cleanup:
-    if(0 == read && feof(f)) rc = 0;
-    if(f) fclose(f);
     return rc;
 }
 
@@ -429,7 +425,17 @@ char * gen_path( vertex_t *v
     return path;
 }
 
-char * shortest_path(void)
+/* Reads a shortest path problem from the fd, solves it, & returns the solution
+ *
+ * Requires:
+ *   - A valid client fd to read from
+ *   - All messages sent over fd comply with the load_map contract
+ *
+ * Guarantees:
+ *   - A string containing the shortest path and distance, if one exists
+ *   - NULL if no path exists
+ */
+char * shortest_path(int fd)
 {
     int i = 0, rc = -1;
     size_t sz = 0;
@@ -442,7 +448,7 @@ char * shortest_path(void)
     v = malloc(sz);
     memset(v, 0, sz);
 
-    rc = load_map("../data/map.bin", v, &start, &end);
+    rc = load_map(fd, v, &start, &end);
     if(0 != rc) goto cleanup;
 
     dist = dijkstras(v, start, end);
@@ -492,16 +498,14 @@ int main()
     }
     while(-1 != (cli_fd = accept(fd, (struct sockaddr*)&cli_addr, &cli_len)))
     {
-        char *path = NULL;
-        fprintf(stderr, "Received a connection from %s:%hu\n",
-                inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
-        if(NULL == (path = shortest_path())) {
+        char *path = shortest_path(cli_fd);
+        if(!path) {
             fprintf(stderr, "Shortest path error\n");
             return -1;
         }
-        fprintf(stderr, "%s\n", path);
         write(cli_fd, path, strlen(path)+1);
         free(path);
         close(cli_fd);
     }
+    return 0;
 }
