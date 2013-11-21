@@ -415,7 +415,7 @@ char * gen_path( vertex_t *v
             path[t] = 0;
         }
     }
-    sprintf(path+h-2, " (%d)\n", v[end].dist); // rm trailing '->'; add distance
+    sprintf(path+h-2, " (%lu)\n", v[end].dist); // rm last '->'; add distance
     return path;
 }
 
