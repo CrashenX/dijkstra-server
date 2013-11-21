@@ -18,9 +18,9 @@ Requirements:
  * The fifth and sixth byte represent the number of edges that follow
  * Each edge is directed
  * Each edge is split into three fields
-  - The first field a vertex and predecessor to the next field
-  - The second field a vertex and the successor to the previous field
-  - The third field is the cost to travel from the predecessor to the successor
+  * The first field a vertex and predecessor to the next field
+  * The second field a vertex and the successor to the previous field
+  * The third field is the cost to travel from the predecessor to the successor
         # Decimal Representation of Input Data
         1  5   9 # start, destination, # edges that follow
         1  2  14
@@ -49,7 +49,7 @@ Requirements:
 
 
 TODO
-====
+----
 - [ ] Talk about endianess
 - [ ] Benchmarks
 - [ ] Test data
