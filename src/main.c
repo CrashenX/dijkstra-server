@@ -92,9 +92,6 @@ int load_map( int fd
     if(sizeof(*end) != r) goto cleanup;
     r = read(fd, &num_vert, sizeof(num_vert));
     if(sizeof(num_vert) != r) goto cleanup;
-#ifdef DEBUG
-    fprintf(stderr, "%d %d %d\n", *start, *end, num_vert);
-#endif
     for(; n < num_vert; ++n) {
         r = read(fd, &i, sizeof(i));
         if(sizeof(i) != r) goto cleanup;
@@ -112,9 +109,6 @@ int load_map( int fd
         if(sizeof(v[i].tail->dest) != r) goto cleanup;
         r = read(fd, &v[i].tail->cost, sizeof(v[i].tail->cost));
         if(sizeof(v[i].tail->cost) != r) goto cleanup;
-#ifdef DEBUG
-        fprintf(stderr, "%d->%d:%d\n", i, v[i].tail->dest, v[i].tail->cost);
-#endif
     }
     rc = 0;
 cleanup:
