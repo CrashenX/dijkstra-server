@@ -3,24 +3,32 @@ dijkstra-server
 
 Reference solution to Dijkstra's algorithm running as a server
 
-Requirements:
-* The application will take a directed acyclic graph, a starting vertex, and
-  a destination vertex and calculate the shortest path from the start to the
+Requirements
+------------
+* The application will take a directed acyclic graph, a starting vertex, and a
+  destination vertex and calculate the shortest path from the start to the
   destination
-* The application will listen on and accept connections on TCP 127.0.0.1:7777
-* Upon establishing a connection with a client the application will read data
-  in the following format from the client file descriptor:
- * The binary input data is split into two byte fields
- * Each field is a sixteen bit unsigned integer
- * There are no delimiters between the fields
- * The first and second byte represent a starting vertex
- * The third and forth byte represent a destination vertex
- * The fifth and sixth byte represent the number of edges that follow
- * Each edge is directed
- * Each edge is split into three fields
-  * The first field a vertex and predecessor to the next field
-  * The second field a vertex and the successor to the previous field
-  * The third field is the cost to travel from the predecessor to the successor
+* The application will listen and accept connections on TCP 127.0.0.1:7777
+* Upon establishing a connection with a client the application will read the
+  starting vertex, destination vertex, and graph from the client file
+  descriptor in the format specified under the Input section and write the
+  shortest path and distance out over the client file descriptor in the format
+  specified under the Output section
+
+Input Format
+------------
+* The binary input data is split into two byte fields
+* Each field is a sixteen bit unsigned integer in the set: {1,2,...,65535}
+ * Zero is an invalid input; it can be assumed that no field will be set to 0
+* There are no delimiters between the fields
+* The first and second byte represent a starting vertex
+* The third and forth byte represent a destination vertex
+* The fifth and sixth byte represent the number of edges that follow
+* Each edge is directed
+* Each edge is split into three fields
+ * The first field a vertex and predecessor to the next field
+ * The second field a vertex and the successor to the previous field
+ * The third field is the cost to travel from the predecessor to the successor
         # Decimal Representation of Input Data
         1  5   9 # start, destination, # edges that follow
         1  2  14
